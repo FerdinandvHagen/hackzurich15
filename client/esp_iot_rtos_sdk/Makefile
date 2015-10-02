@@ -193,7 +193,6 @@ CCFLAGS += 			\
 	-g			\
 	-Wpointer-arith		\
 	-Wundef			\
-	-Werror			\
 	-Wl,-EL			\
 	-fno-inline-functions	\
 	-nostdlib       \
