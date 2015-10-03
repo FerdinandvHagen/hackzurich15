@@ -381,6 +381,8 @@ uart_init_new(int baud, uart_rx_callback callback)
     UART_WaitTxFifoEmpty(UART0);
     UART_WaitTxFifoEmpty(UART1);
 
+    //system_uart_swap();
+
     UART_ConfigTypeDef uart_config;
 
     // configure main uart (used for bridge)
@@ -399,7 +401,7 @@ uart_init_new(int baud, uart_rx_callback callback)
     uart_config.baud_rate = BIT_RATE_460800;
     UART_ParamConfig(UART1, &uart_config);
 
-    UART_SetPrintPort(UART1);
+    UART_SetPrintPort(UART0);
 
     UART_IntrConfTypeDef uart_intr;
     uart_intr.UART_IntrEnMask = UART_RXFIFO_TOUT_INT_ENA | UART_FRM_ERR_INT_ENA | UART_RXFIFO_FULL_INT_ENA | UART_TXFIFO_EMPTY_INT_ENA;
