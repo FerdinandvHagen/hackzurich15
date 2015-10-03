@@ -3,15 +3,44 @@ var app = express();
 
 var net = require('net');
 
-var mongoose = require('mongoose');
-mongoose.connect('mongodb://localhost/hackzurich15');
+var app = require('express')();
+var http = require('http').Server(app);
+var io = require('socket.io')(http);
+
+var serveStatic = require('serve-static')
+
+app.use('/app', serveStatic('../client/app'));
+app.use('/bower_components', express.static('../client/bower_components'));
+
+app.get('/', function(req, res){
+  res.sendfile('index.html');
+});
+
+io.on('connection', function(socket){
+  console.log('Browser connected');
+});
+
+http.listen(3000, function(){
+  console.log('listening on *:3000');
+});
+
+
+
+
 
 var socketServer = net.createServer(function (socket) {
 	socket.on('end', function () {
 		console.log('client disconnected');
 	});
 
+	socket.on('timeout', function () {
+		console.log('Closing socket to ' + socket.remoteAddress + ' due to a timeout');
+		socket.destroy();
+	})
+
 	console.log("Client connected :)  " + socket.remoteAddress);
+	socket.setTimeout(60000);
+
 	socket.on('data', function (data) {
 		chunks = String(data).split('\0');
 		for (i = 0; i < chunks.length; ++i) {
@@ -24,12 +53,18 @@ var socketServer = net.createServer(function (socket) {
 	});
 });
 
+socketServer.listen(3003, function () {
+	console.log('Socket Server is now bound');
+});
+
+
+
 function decode(chunk) {
 	console.log(chunk);
 	//First decode the Type
 	subtype = parseInt(chunk.charAt(24), 16);
 	maintype = parseInt(chunk.charAt(25), 16);
-	
+
 	switch (maintype) {
 		case 0:
 			console.log('Type: Management');
@@ -215,31 +250,16 @@ function decode(chunk) {
 	if ((rssi & 0x80) > 0) {
 		rssi = rssi - 0x100;
 	}
-	//console.log('RSSI: ' + rssi);
+	console.log('RSSI: ' + rssi);
 
 	channel = chunk.substring(8, 10);
 	channel = parseInt(channel, 16);
-	//console.log('Channel: ' + channel);
+	console.log('Channel: ' + channel);
 
 	console.log('MAC: ' + chunk.substring(12, 24));
 
 	timestamp = chunk.substring(0, 8);
 	timestamp = parseInt(timestamp, 16);
-	//console.log('Timestamp: ' + timestamp);
+	console.log('Timestamp: ' + timestamp);
 }
 
-
-socketServer.listen(3003, function () {
-	console.log('Socket Server is now bound');
-});
-
-app.get('/', function (req, res) {
-	res.send('Hello World!');
-});
-
-var server = app.listen(3000, function () {
-	var host = server.address().address;
-	var port = server.address().port;
-
-	console.log('Example app listening at http://%s:%s', host, port);
-});
