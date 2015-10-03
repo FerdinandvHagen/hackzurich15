@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#include <uart_protocol.h>
 #include "esp_common.h"
 
 #include "freertos/FreeRTOS.h"
@@ -33,7 +34,6 @@ SOFTWARE.
 
 #include "uart.h"
 #include "uart_protocol.h"
-#include "monitor_mode.h"
 
 #include "user_config.h"
 #include "gpio.h"
@@ -55,53 +55,6 @@ int ignored_macs_count = 0;
 
 void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel, unsigned int timestamp);
 
-void promisc_cb(uint8 *buf, uint16 len) {
-    gpio_signal(2);
-
-    printf("%d -> %3d: %d \n", system_get_time(), wifi_get_channel(), len);
-
-    //Extract the first to bytes from the system
-    uint8 byte1;
-    uint8 byte2;
-    char mac[6];
-    char rssi;
-    uint8 channel;
-
-    if (len != 12) {
-        if (len == 128) {
-            struct sniffer_buf2 *sb = (struct sniffer_buf2 *) buf;
-            byte1 = sb->buf[0];
-            byte2 = sb->buf[1];
-            rssi = sb->rx_ctrl.rssi;
-            channel = (uint8) sb->rx_ctrl.channel;
-
-            //MAC-Address is just always the second address in the packet because this is always the direct Transmission Address
-            int i;
-            for (i = 0; i < 6; ++i) {
-                mac[i] = sb->buf[10 + i];
-            }
-        } else {
-            struct sniffer_buf *sb = (struct sniffer_buf *) buf;
-            byte1 = sb->buf[0];
-            byte2 = sb->buf[1];
-            rssi = sb->rx_ctrl.rssi;
-            channel = (uint8) sb->rx_ctrl.channel;
-
-            //MAC-Address is just always the second address in the packet because this is always the direct Transmission Address
-            int i;
-            for (i = 0; i < 6; ++i) {
-                mac[i] = sb->buf[10 + i];
-            }
-        }
-
-        uart_tx(byte1, byte2, rssi, mac, wifi_get_channel(), system_get_time());
-    } else {
-        printf("Packet not convertible. Ignoring");
-    }
-
-    gpio_signal(1);
-}
-
 /**
  * UART TX packet structure:
  * | packet count : 8 | timestamp : 8 * 8 | rssi : 8 * 2 | end : 8 |
@@ -109,49 +62,13 @@ void promisc_cb(uint8 *buf, uint16 len) {
 
 unsigned char packet_cnt = 1;
 
-void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel, unsigned int timestamp) {
-    uart_data_struct tx;
-
-    tx.count = packet_cnt;
-    itstr((char *) tx.timestamp, sizeof(tx.timestamp), timestamp, 16, sizeof(tx.timestamp));
-    itstr((char *) tx.channel, 2, channel, 16, 2);
-    itstr((char *) tx.rssi, sizeof(tx.rssi), rssi, 16, sizeof(tx.rssi));
-
-    int i;
-    for (i = 0; i < 6; i++) {
-        itstr((char *) tx.mac[i], 2, mac[i], 16, 2);
-    }
-
-    itstr((char *) tx.byte1, 2, tx.byte1, 16, 2);
-    itstr((char *) tx.byte2, 2, tx.byte2, 16, 2);
-
-    // send bytes constructed so far and termination byte
-
-    for (i = 0; i < sizeof(tx.bytes); i++) {
-        uart_tx_one_char(UART, tx.bytes[i]);
-    }
-
-    uart_tx_one_char(UART, 0);
-
-    packet_cnt++;
-    if (!packet_cnt) {
-        packet_cnt = 1;
-    }
-}
-
-void channelHop(xTimerHandle pxTimer) {
-    // 1 - 13 channel hopping
-    uint8 new_channel = 10; //wifi_get_channel() % 13 + 1;
-    DBG("  --- hop to %d", new_channel);
-    wifi_set_channel(new_channel);
-}
-
 void main_task(void *pvParameters) {
     DBG("main task...");
 
     gpio_init();
 
-    wifi_promiscuous_enable(1);
+    // disable prom mode temporarily
+    //wifi_promiscuous_enable(1);
 
     vTaskSuspend(NULL);
 }
@@ -159,18 +76,83 @@ void main_task(void *pvParameters) {
 // UART RX parsing
 
 typedef enum {
-    WAITING, CTRL_BYTE, DATA, END
-};
+    CTRL_BYTE, DATA, END
+} uart_rx_state;
+
+unsigned char uart_ctrl;
+
+bool valid_packet;
+uart_data_struct data;
+int data_len = 0;
+
+uart_rx_state rx_state;
+
+void uart_received() {
+    for (int i = 0; i < data_len; i++) {
+        printf("%02X", data.bytes[i]);
+    }
+}
+
+void uart_parse(char c) {
+    switch (rx_state) {
+        case CTRL_BYTE:
+            uart_ctrl = c;
+            rx_state = DATA;
+            valid_packet = true;
+            break;
+
+        case DATA:
+            if (c == 0) {
+                bool valid = false;
+                switch (uart_ctrl) {
+                    case CTRL_DATA:
+                        if (data_len == sizeof(uart_data_struct)) {
+                            valid = true;
+                        }
+                        break;
+                }
+                if (valid) {
+                    uart_received();
+                } else {
+                    DBG("other length expected");
+                }
+                rx_state = CTRL_BYTE;
+                break;
+            }
+            switch (uart_ctrl) {
+                case CTRL_DATA:
+                    if (data_len > sizeof(uart_data_struct)) {
+                        valid_packet = false;
+                        rx_state = END;
+                        DBG("buffer overflow");
+                    } else {
+                        data.bytes[data_len++] = c;
+                    }
+                    break;
+            }
+            break;
+        case END:
+            if (c == 0) {
+                rx_state = CTRL_BYTE;
+                break;
+            }
+
+    }
+}
 
 void uart_rx(int len) {
-
     int i;
 
     for (i = 0; i < len; i++) {
+        unsigned char c = uart_rx_one_char(UART);
+
+        uart_parse(c);
+
         printf("rx:%d", uart_rx_one_char(UART));
     }
-
 }
+
+
 
 /******************************************************************************
  * FunctionName : user_init
@@ -180,11 +162,6 @@ void uart_rx(int len) {
 *******************************************************************************/
 void user_init(void) {
     system_update_cpu_freq(160);
-
-#ifdef DEV
-    system_uart_swap();
-#endif
-
     uart_init_new(BAUD, uart_rx);
 
     printf("setting cpu freq to 160 MHz\n");
@@ -207,34 +184,11 @@ void user_init(void) {
     system_update_cpu_freq(160);
 #endif
 
-    DBG("----- monitor mode test");
 
     DBG(" ---- set opmode");
-    if (!wifi_set_opmode(0x1)) {
+    if (!wifi_set_opmode(STATIONAP_MODE)) {
         DBG(" ---- > failed to set opmode");
     }
-    DBG(" ---- done");
-
-    DBG(" ---- monitor mode setup");
-
-    vTaskDelay(100 / portTICK_RATE_MS);
-    wifi_station_disconnect();
-    vTaskDelay(100 / portTICK_RATE_MS);
-
-    wifi_set_promiscuous_rx_cb(promisc_cb);
-
-    timer = xTimerCreate("channel_hopping", CHANNEL_HOP_INTERVAL / portTICK_RATE_MS, pdTRUE, (void *) 0, channelHop);
-
-#ifdef CHANNEL_HOP_ENABLED
-    if (timer) {
-        if (xTimerStart(timer, 0) != pdPASS) {
-            DBG(" ---- failed to start timer");
-        }
-    } else {
-        DBG(" ---- failed to create timer");
-    }
-#endif
-
     DBG(" ---- done");
 
     xTaskCreate(main_task, "main", 256, NULL, 2, NULL);

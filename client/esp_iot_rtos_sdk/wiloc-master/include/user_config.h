@@ -3,8 +3,8 @@
 
 #define BAUD 460800
 
-//#define CHANNEL_HOP_ENABLED
-#define CHANNEL_HOP_INTERVAL 50
+#define SSID "AUFVH"
+#define PASSWORD "ferdinandvonhagen"
 
 // hardware configuration
 // DEV:

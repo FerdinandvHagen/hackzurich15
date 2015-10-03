@@ -13,8 +13,8 @@ set(SOURCE_FILES
     )
 
 include_directories(include)
-include_directories(../extra_include)
 include_directories(../wiloc-common/include)
+include_directories(../extra_include)
 include_directories(../include)
 include_directories(../include/espressif)
 include_directories(../include/lwip)
