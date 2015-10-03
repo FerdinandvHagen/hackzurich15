@@ -60,9 +60,9 @@
         </div>
         <div id="navbar" class="navbar-collapse collapse">
             <ul class="nav navbar-nav">
-                <li class="active"><a href="#/map">Map</a></li>
-                <li><a href="#/monitor">Monitor</a></li>
-                <li><a href="#/settings">Settings</a></li>
+                <li ng-class="{active: l.path() == '/map'}"><a href="#/map">Map</a></li>
+                <li ng-class="{active: l.path() == '/monitor'}"><a href="#/monitor">Monitor</a></li>
+                <li ng-class="{active: l.path() == '/settings'}"><a href="#/settings">Settings</a></li>
             </ul>
         </div>
         <!--/.nav-collapse -->
@@ -75,6 +75,8 @@
 
 </div>
 
+<script src="../bower_components/lodash/lodash.min.js"></script>
+
 <script src="../bower_components/jquery/dist/jquery.js"></script>
 <script src="../bower_components/angular/angular.js"></script>
 <script src="../bower_components/angular-route/angular-route.min.js"></script>
@@ -85,7 +87,10 @@
 <script src="scripts/app.js"></script>
 <script src="scripts/mapCtrl.js"></script>
 <script src="scripts/monitorCtrl.js"></script>
+<script src="scripts/monitorSingleCtrl.js"></script>
 <script src="scripts/dataService.js"></script>
+
+<script src="/socket.io/socket.io.js"></script>
 
 </body>
 </html>

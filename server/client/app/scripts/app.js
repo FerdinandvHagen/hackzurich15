@@ -23,4 +23,10 @@ angular.module('wiloc', [
                 templateUrl: 'template/monitor.html',
                 controller: 'MonitorCtrl'
             })
+            .when('/monitor/:mac', {
+                templateUrl: 'template/monitorSingle.html',
+                controller: 'MonitorSingleCtrl'
+            })
+    }).run(function ($rootScope, $location) {
+        $rootScope.l = $location;
     });

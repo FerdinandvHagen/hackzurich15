@@ -9,24 +9,43 @@ var io = require('socket.io')(http);
 
 var serveStatic = require('serve-static')
 
+var currentMacs = {};
+
+var subscription = [];
+
+var packets = {};
+
+var nodeCount = 2;
+
 app.use('/app', serveStatic('../client/app'));
 app.use('/bower_components', express.static('../client/bower_components'));
 
-app.get('/', function(req, res){
-  res.redirect('/app/index.html');
+app.get('/', function (req, res) {
+	res.redirect('/app/index.html');
 });
 
-io.on('connection', function(socket){
-  console.log('Browser connected');
+io.on('connection', function (socket) {
+	console.log('Browser connected');
+	socket.on('disconnect', function () {
+		console.log('user disconnected');
+	});
+
+	socket.on('getmac', function (msg) {
+		socket.emit('currentMacs', currentMacs);
+	});
+
+	socket.on('subscribe', function (msg) {
+		console.log('Subscribing to ' + msg);
+		if (undefined == subscription[msg]) {
+			subscription[msg] = [];
+		}
+		subscription[msg].push(socket);
+	});
 });
 
-http.listen(3000, function(){
-  console.log('listening on *:3000');
+http.listen(3000, function () {
+	console.log('listening on *:3000');
 });
-
-
-
-
 
 var socketServer = net.createServer(function (socket) {
 	socket.on('end', function () {
@@ -45,10 +64,9 @@ var socketServer = net.createServer(function (socket) {
 		chunks = String(data).split('\0');
 		for (i = 0; i < chunks.length; ++i) {
 			if (chunks[i].length == 31) {
-				//ignore first character
+				//ignore first three characters
 				buf = new Buffer(chunks[i]);
-				console.log('ID: ' + buf[2]);
-				decode(chunks[i].substring(3, chunks[i].length));
+				decode(chunks[i].substring(3, chunks[i].length), buf[2]);
 			}
 		}
 	});
@@ -60,8 +78,59 @@ socketServer.listen(3003, function () {
 
 
 
-function decode(chunk) {
-	console.log(chunk);
+function decode(chunk, id) {
+	//console.log(chunk);
+	
+	//Get RSSI:
+	rssi = chunk.substring(10, 12);
+	rssi = parseInt(rssi, 16);
+	if ((rssi & 0x80) > 0) {
+		rssi = rssi - 0x100;
+	}
+	//console.log('RSSI: ' + rssi);
+
+	channel = chunk.substring(8, 10);
+	channel = parseInt(channel, 16);
+	//console.log('Channel: ' + channel);
+
+	//console.log('MAC: ' + chunk.substring(12, 24));
+	mac = chunk.substring(12, 24);
+	currentMacs[mac] = Date.now();
+
+	timestamp = chunk.substring(0, 8);
+	timestamp = parseInt(timestamp, 16);
+	//console.log('Timestamp: ' + timestamp);
+	
+	if (mac in packets && packets[mac].timestamp > (Date.now() - 1000)) {
+		if (!(id in packets[mac].rssi)) {
+			packets[mac].rssi[id] = rssi;
+		}
+
+		if (Object.keys(packets[mac].rssi).length == nodeCount) {
+			if (mac in subscription) {
+				subscription[mac].forEach(function (element) {
+					if (element.connected) {
+						element.emit('data', packets[mac]);
+					}
+				}, this);
+			}
+		}
+	} else {
+		time = Date.now();
+		packets[mac] = {
+			timestamp: time,
+			rssi: {},
+			addr:mac
+		};
+		packets[mac].rssi[id] = rssi;
+	}
+
+
+
+
+}
+
+function printType(chunk) {
 	//First decode the Type
 	subtype = parseInt(chunk.charAt(24), 16);
 	maintype = parseInt(chunk.charAt(25), 16);
@@ -244,23 +313,4 @@ function decode(chunk) {
 		default:
 			console.log('Go home you are drunk!');
 	}
-	
-	//Get RSSI:
-	rssi = chunk.substring(10, 12);
-	rssi = parseInt(rssi, 16);
-	if ((rssi & 0x80) > 0) {
-		rssi = rssi - 0x100;
-	}
-	console.log('RSSI: ' + rssi);
-
-	channel = chunk.substring(8, 10);
-	channel = parseInt(channel, 16);
-	console.log('Channel: ' + channel);
-
-	console.log('MAC: ' + chunk.substring(12, 24));
-
-	timestamp = chunk.substring(0, 8);
-	timestamp = parseInt(timestamp, 16);
-	console.log('Timestamp: ' + timestamp);
 }
-

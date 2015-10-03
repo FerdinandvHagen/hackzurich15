@@ -1,17 +1,17 @@
 <table class="table table-hover">
     <thead>
     <tr>
-        <td>MAC</td>
-
+        <th class="col-md-4">MAC</th>
+        <th class="col-md-6">Last seen [sec] <span class="glyphicon glyphicon-time" aria-hidden="true"></span></th>
+        <th class="col-md-2"></th>
     </tr>
 
     </thead>
     <tbody>
-    <tr ng-repeat="host in filteredHosts">
-        <td>{{host.MAC}}</td>
-        <td ng-repeat="node in availableNodes">
-            {{node.RSSI}}
-        </td>
+    <tr ng-repeat="host in hosts">
+        <td><samp>{{host.mac.toUpperCase()}}</samp></td>
+        <td>{{host.timestamp / 1000 | number:1}}</td>
+        <td><button class="btn btn-primary" ng-click="monitor(host)">Monitor</button></td>
     </tr>
 
     </tbody>
