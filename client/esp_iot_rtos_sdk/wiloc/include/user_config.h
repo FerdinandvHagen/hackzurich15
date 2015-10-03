@@ -1,7 +1,7 @@
 #ifndef __USER_CONFIG_H__
 #define __USER_CONFIG_H__
 
-#define BAUD 38400
+#define BAUD 3686400
 
 //#define CHANNEL_HOP_ENABLED
 #define CHANNEL_HOP_INTERVAL 50
