@@ -12,6 +12,7 @@ set(SOURCE_FILES
     user/gpio.c
     user/itstr.c
     user/user_wifi.c
+    user/ringbuf.c
     )
 
 include_directories(include)

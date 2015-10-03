@@ -35,6 +35,7 @@ SOFTWARE.
 #include "uart.h"
 #include "uart_protocol.h"
 #include "user_wifi.h"
+#include "ringbuf.h"
 
 #include "user_config.h"
 #include "gpio.h"
@@ -56,6 +57,14 @@ struct sockaddr_in remote_ip;
 
 unsigned char buffer[1024];
 
+unsigned char tx_buffer_m[1024 * 4];
+unsigned char tx_buffer_t[256];
+
+xQueueHandle tx_queue;
+
+xSemaphoreHandle ringbuf_mutex;
+ringbuf ringbuf_m, ringbuf_t; // main and temporary ringbuffer
+
 unsigned char ignored_macs[MAX_INGORE_MACS][6];
 int ignored_macs_count = 0;
 
@@ -65,6 +74,43 @@ void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, uns
  * UART TX packet structure:
  * | packet count : 8 | timestamp : 8 * 8 | rssi : 8 * 2 | end : 8 |
  */
+
+void write_task(void *pvParameters) {
+    int i;
+    while (1) {
+        if (xQueueReceive(tx_queue, &i, portMAX_DELAY)) {
+            if (xSemaphoreTake(ringbuf_mutex, portMAX_DELAY)) {
+                int length = ringbuf_m.fill_cnt;
+                DBG("net_tx: %d", length);
+
+                unsigned char c;
+                for (i = 0; i < length && i < sizeof(tx_buffer_m); i++) {
+                    if (ringbuf_get(&ringbuf_m, &c)) {
+                        printf("buffer error!\n");
+                        break;
+                    }
+                    tx_buffer_m[i] = c;
+                }
+                xSemaphoreGive(ringbuf_mutex);
+            } else {
+                printf("write_task: semphr already taken\n");
+            }
+
+            if (write(sta_socket, tx_buffer_m, i) < 0) {
+                printf("C > send fail\n");
+
+                close(sta_socket);
+                sta_socket = 0;
+                break;
+            }
+        } else {
+            printf("tx: failed to receive from queue\n");
+        }
+    }
+
+    printf("exiting write task\n");
+    vTaskDelete(NULL);
+}
 
 void main_task(void *pvParameters) {
     DBG("main task...");
@@ -108,6 +154,9 @@ void main_task(void *pvParameters) {
             printf("ESP8266 TCP client task > send fail\n");
         }
 
+        // we are connected, create task to write
+        xTaskCreate(write_task, "write_task", 256, NULL, 2, NULL);
+
         while (sta_socket) {
             int recbytes = 0;
             char *recv_buf = (char *) zalloc(128);
@@ -140,48 +189,48 @@ int data_len = 0;
 
 uart_rx_state rx_state = CTRL_BYTE;
 
-void uart_received() {
-    int i;
+void uart_rx(int length) {
+    if (sta_socket < 0)
+        return;
 
-    uart_data_packet packet;
+    int i = 0;
+    unsigned char c;
+    bool rb_full = false;
 
-    //printf("%s\n", data.bytes);
+    if (xSemaphoreTakeFromISR(ringbuf_mutex, NULL)) {
+        while (ringbuf_get(&ringbuf_t, &c) == 0) {
+            if (ringbuf_owr(&ringbuf_m, c)) {
+                rb_full = true;
+            }
+        }
 
-    /*
-    if (sta_socket) {
-        if (write(sta_socket, data.bytes, sizeof(data.bytes)) < 0) {
-            close(sta_socket);
-            sta_socket = 0;
-            vTaskDelay(1000 / portTICK_RATE_MS);
-            printf("ESP8266 TCP client task > send fail\n");
+        for (i = 0; i < length; i++) {
+            if (ringbuf_owr(&ringbuf_m, uart_rx_one_char(UART0))) {
+                rb_full = true;
+            }
+        }
+        xSemaphoreGiveFromISR(ringbuf_mutex, NULL);
+    } else {
+        DBG("uart_rx: failed to take semphr");
+
+        // ringbuf is taken by send task
+        // all uart data is copied in temporary ringbuffer that will be copied in main ringbuffer once it is available
+        for (i = 0; i < length; i++) {
+            if (ringbuf_owr(&ringbuf_t, uart_rx_one_char(UART0))) {
+                rb_full = true;
+            }
         }
     }
-     */
 
-    //packet.count = data.count;
-}
+    DBG("uart_rx: %d b", length);
 
-void uart_parse(unsigned char c) {
-    unsigned char c2 = c;
-    if (sta_socket) {
-        if (write(sta_socket, &c2, 1) < 0) {
-            close(sta_socket);
-            sta_socket = 0;
-            vTaskDelay(1000 / portTICK_RATE_MS);
-            printf("ESP8266 TCP client task > send fail\n");
-        }
-    }
-}
+    // notify send task that there is data to be sent
+    xQueueSendToBackFromISR(tx_queue, &length, NULL);
 
-void uart_rx(int len) {
-    int i;
-
-    for (i = 0; i < len; i++) {
-        unsigned char c = uart_rx_one_char(UART);
-
-        uart_parse(c);
-
-        //printf("rx:%d", uart_rx_one_char(UART));
+    if (rb_full) {
+        // not every byte could be put in one of the two ringbuffers
+        // we can just print a message about it
+        DBG("uart_rx: ringbuff overflow");
     }
 }
 
@@ -247,6 +296,14 @@ void user_init(void) {
 
     DBG(" --- trying to connect to AP");
 
+    tx_queue = xQueueCreate(1, sizeof(int));
+
+    ringbuf_mutex = xSemaphoreCreateMutex();
+
+    ringbuf_init(&ringbuf_m, tx_buffer_m, sizeof(tx_buffer_m));
+    ringbuf_init(&ringbuf_t, tx_buffer_t, sizeof(tx_buffer_t));
+
+    // wait until wifi is connected
     user_wifi_init(connect_to_server);
 
 }
