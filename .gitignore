@@ -26,3 +26,4 @@ node_modules
 /client/esp_iot_rtos_sdk/wiloc-master/firmware/eagle.dump
 /client/esp_iot_rtos_sdk/wiloc-master/firmware/eagle.flash.bin
 /client/esp_iot_rtos_sdk/wiloc-master/firmware/eagle.irom0text.bin
+/.vscode/launch.json
