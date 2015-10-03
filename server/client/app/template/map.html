@@ -1,0 +1,61 @@
+<div class="row">
+    <div id="radar"></div>
+</div>
+        
+<script>
+    function name (d) {
+        return d.name;
+    }
+    function group (d) {
+        return d.group;
+    }
+
+    var color = d3.scale.category10();
+    function colorByGroup (d) {
+        return color(group(d));
+    }
+
+    var svg = d3.select('#radar')
+            .append('svg')
+            .attr("width", '100%')
+            .attr("height", '960');
+
+    var node, device, link;
+
+
+    d3.json('data.json', function (err, data) {
+
+        data.devices.forEach(function (d, i) {
+            d.id = i;
+        });
+
+        link = svg.selectAll('.link')
+                .data(data.links)
+                .enter().append('line')
+                .attr('class', 'link')
+                .style("stroke-width", function (d) {
+                    return Math.sqrt(d.value);
+                });
+
+        device = svg.selectAll('.device')
+                .data(data.devices)
+                .enter().append('g')
+                .attr('title', name)
+                .attr('class', 'device')
+                .attr("transform", function (d) {
+                    console.log(d);
+                    return "translate(" + d.x + "," + d.y + ")";
+                });
+
+        device.append('circle')
+                .attr('r', 30)
+                .attr('fill', colorByGroup)
+                .attr('fill-opacity', 0.5);
+
+        device.append('circle')
+                .attr('r', 4)
+                .attr('stroke', 'black');
+
+    });
+
+</script>
