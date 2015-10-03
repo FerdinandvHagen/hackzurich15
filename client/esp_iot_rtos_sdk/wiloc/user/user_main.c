@@ -303,7 +303,10 @@ void assign_dev_id() {
  * Returns      : none
 *******************************************************************************/
 void user_init(void) {
+
+#ifdef DOUBLE_CLK_FREQ
     system_update_cpu_freq(160);
+#endif
 
 #ifdef DEV
     system_uart_swap();
@@ -311,7 +314,7 @@ void user_init(void) {
 
     uart_init_new(BAUD, uart_rx);
 
-    DBG("setting cpu freq to 160 MHz");
+    DBG("WILOC");
 
     DBG("SDK version:%s", system_get_sdk_version());
 
@@ -324,11 +327,6 @@ void user_init(void) {
     wifi_get_macaddr(SOFTAP_IF, mac);
     DBG("MAC- AP:");
     printmac(mac, 0);
-
-
-#ifdef DOUBLE_CLK_FREQ
-    system_update_cpu_freq(160);
-#endif
 
     DBG("----- monitor mode test");
 
