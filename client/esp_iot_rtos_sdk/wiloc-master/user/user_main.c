@@ -34,6 +34,7 @@ SOFTWARE.
 
 #include "uart.h"
 #include "uart_protocol.h"
+#include "user_wifi.h"
 
 #include "user_config.h"
 #include "gpio.h"
@@ -75,8 +76,9 @@ void main_task(void *pvParameters) {
             vTaskDelay(1000 / portTICK_RATE_MS);
             DBG("ESP8266 TCP client task > socket fail!\n");
 
-            vTaskSuspend(NULL);
+            continue;
         }
+
         DBG("ESP8266 TCP client task > socket ok!\n");
 
         bzero(&remote_ip, sizeof(struct sockaddr_in));
@@ -97,8 +99,7 @@ void main_task(void *pvParameters) {
             char *recv_buf = (char *) zalloc(128);
             while ((recbytes = read(sta_socket, recv_buf, 128)) > 0) {
                 recv_buf[recbytes] = 0;
-                printf("ESP8266 TCP client task > recv data %d bytes!\nESP8266 TCP client task > %s\n", recbytes,
-                       recv_buf);
+                //printf("ESP8266 TCP client task > recv data %d bytes!\nESP8266 TCP client task > %s\n", recbytes, recv_buf);
             }
             free(recv_buf);
             if (recbytes <= 0) {
@@ -145,53 +146,14 @@ void uart_received() {
 }
 
 void uart_parse(unsigned char c) {
-    switch (rx_state) {
-        case CTRL_BYTE:
-            if (c != 0) {
-                uart_ctrl = c;
-                rx_state = DATA;
-                data_len = 0;
-            }
-            break;
-
-        case DATA:
-            if (c == 0) {
-                bool valid = true;
-                switch (uart_ctrl) {
-                    case CTRL_DATA:
-                        if (data_len == sizeof(uart_data_struct) - 1) {
-                            valid = true;
-                        } else {
-                            DBG("other length expected (2): %d - %d", data_len, sizeof(uart_data_struct));
-                        }
-                        break;
-                }
-                if (valid) {
-                    uart_received();
-                } else {
-                    DBG("other length expected: %d", data_len);
-                }
-                rx_state = CTRL_BYTE;
-            } else {
-                switch (uart_ctrl) {
-                    case CTRL_DATA:
-                        if (data_len > sizeof(uart_data_struct)) {
-                            rx_state = END;
-                            DBG("buffer overflow");
-                        } else {
-                            data.bytes[data_len++] = c;
-                        }
-                        break;
-                }
-            }
-            break;
-
-        case END:
-            if (c == 0) {
-                rx_state = CTRL_BYTE;
-                break;
-            }
-            break;
+    unsigned char c2 = c;
+    if (sta_socket) {
+        if (write(sta_socket, &c2, 1) < 0) {
+            close(sta_socket);
+            sta_socket = 0;
+            vTaskDelay(1000 / portTICK_RATE_MS);
+            printf("ESP8266 TCP client task > send fail\n");
+        }
     }
 }
 
@@ -207,6 +169,9 @@ void uart_rx(int len) {
     }
 }
 
+void connect_to_server() {
+    xTaskCreate(main_task, "main", 256, NULL, 2, NULL);
+}
 
 
 /******************************************************************************
@@ -266,7 +231,7 @@ void user_init(void) {
 
     DBG(" --- trying to connect to AP");
 
-    xTaskCreate(main_task, "main", 256, NULL, 2, NULL);
+    user_wifi_init(connect_to_server);
 
 }
 

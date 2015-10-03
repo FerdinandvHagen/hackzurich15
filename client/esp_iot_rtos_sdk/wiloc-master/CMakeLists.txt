@@ -10,6 +10,8 @@ set(SOURCE_FILES
     driver/uart.c
     user/user_main.c
     user/gpio.c
+    user/itstr.c
+    user/user_wifi.c
     )
 
 include_directories(include)
