@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+    <title>WILOC</title>
+
+    <!-- Bootstrap -->
+    <link href="../bower_components/bootstrap/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+
+    <style>
+
+        .node {
+            opacity: 0.5;
+        }
+
+        .node:hover {
+            opacity: 1;
+        }
+
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.3;
+        }
+
+        #radar {
+            border: 1px solid #222222;
+            height: 100%;
+        }
+
+    </style>
+    <script src="http://d3js.org/d3.v3.min.js"></script>
+</head>
+<body>
+
+
+<!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+<!-- Include all compiled plugins (below), or include individual files as needed -->
+<script src="../bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
+
+<div class="container">
+    <div class="row">
+        <h1>WILOC prototype</h1>
+
+        <div id="radar"></div>
+    </div>
+</div>
+
+<script>
+
+    function name(d) { return d.name; }
+    function group(d) { return d.group; }
+
+    var color = d3.scale.category10();
+    function colorByGroup(d) { return color(group(d)); }
+
+    var width = 960,
+            height = 500;
+
+    var svg = d3.select('#radar')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+
+    var node, link;
+
+    var voronoi = d3.geom.voronoi()
+            .x(function(d) { return d.x; })
+            .y(function(d) { return d.y; })
+            .clipExtent([[-10, -10], [width+10, height+10]]);
+
+    function recenterVoronoi(nodes) {
+        var shapes = [];
+        voronoi(nodes).forEach(function(d) {
+            if ( !d.length ) return;
+            var n = [];
+            d.forEach(function(c){
+                n.push([ c[0] - d.point.x, c[1] - d.point.y ]);
+            });
+            n.point = d.point;
+            shapes.push(n);
+        });
+        return shapes;
+    }
+
+    var force = d3.layout.force()
+            .charge(-2000)
+            .friction(0.3)
+            .linkDistance(50)
+            .size([width, height]);
+
+    force.on('tick', function() {
+        node.attr('transform', function(d) { return 'translate('+d.x+','+d.y+')'; })
+                .attr('clip-path', function(d) { return 'url(#clip-'+d.index+')'; });
+
+        link.attr('x1', function(d) { return d.source.x; })
+                .attr('y1', function(d) { return d.source.y; })
+                .attr('x2', function(d) { return d.target.x; })
+                .attr('y2', function(d) { return d.target.y; });
+
+        var clip = svg.selectAll('.clip')
+                .data( recenterVoronoi(node.data()), function(d) { return d.point.index; } );
+
+        clip.enter().append('clipPath')
+                .attr('id', function(d) { return 'clip-'+d.point.index; })
+                .attr('class', 'clip');
+        clip.exit().remove()
+
+        clip.selectAll('path').remove();
+        clip.append('path')
+                .attr('d', function(d) { return 'M'+d.join(',')+'Z'; });
+    });
+
+    d3.json('data.json', function(err, data) {
+
+        data.nodes.forEach(function(d, i) {
+            d.id = i;
+        });
+
+        link = svg.selectAll('.link')
+                .data( data.links )
+                .enter().append('line')
+                .attr('class', 'link')
+                .style("stroke-width", function(d) { return Math.sqrt(d.value); });
+
+        node = svg.selectAll('.node')
+                .data( data.nodes )
+                .enter().append('g')
+                .attr('title', name)
+                .attr('class', 'node')
+                .call( force.drag );
+
+        node.append('circle')
+                .attr('r', 30)
+                .attr('fill', colorByGroup)
+                .attr('fill-opacity', 0.5);
+
+        node.append('circle')
+                .attr('r', 4)
+                .attr('stroke', 'black');
+
+        force
+                .nodes( data.nodes )
+                .links( data.links )
+                .start();
+    });
+
+</script>
+
+</body>
+</html>
+
+
+<html>
+<head>
+
+</head>
+<body>
+</body>
+</html>
