@@ -9,24 +9,30 @@ var io = require('socket.io')(http);
 
 var serveStatic = require('serve-static')
 
+var currentMacs = {};
+
 app.use('/app', serveStatic('../client/app'));
 app.use('/bower_components', express.static('../client/bower_components'));
 
-app.get('/', function(req, res){
-  res.redirect('/app/index.html');
+app.get('/', function (req, res) {
+	res.redirect('/app/index.html');
 });
 
-io.on('connection', function(socket){
-  console.log('Browser connected');
+io.on('connection', function (socket) {
+	console.log('Browser connected');
+	socket.on('disconnect', function () {
+		console.log('user disconnected');
+	});
+
+	socket.on('getmac', function (msg) {
+		console.log(currentMacs);
+		socket.emit('currentMacs', currentMacs);
+	});
 });
 
-http.listen(3000, function(){
-  console.log('listening on *:3000');
+http.listen(3000, function () {
+	console.log('listening on *:3000');
 });
-
-
-
-
 
 var socketServer = net.createServer(function (socket) {
 	socket.on('end', function () {
@@ -47,7 +53,7 @@ var socketServer = net.createServer(function (socket) {
 			if (chunks[i].length == 31) {
 				//ignore first character
 				buf = new Buffer(chunks[i]);
-				console.log('ID: ' + buf[2]);
+				//console.log('ID: ' + buf[2]);
 				decode(chunks[i].substring(3, chunks[i].length));
 			}
 		}
@@ -61,7 +67,29 @@ socketServer.listen(3003, function () {
 
 
 function decode(chunk) {
-	console.log(chunk);
+	//console.log(chunk);
+	
+	//Get RSSI:
+	rssi = chunk.substring(10, 12);
+	rssi = parseInt(rssi, 16);
+	if ((rssi & 0x80) > 0) {
+		rssi = rssi - 0x100;
+	}
+	//console.log('RSSI: ' + rssi);
+
+	channel = chunk.substring(8, 10);
+	channel = parseInt(channel, 16);
+	//console.log('Channel: ' + channel);
+
+	//console.log('MAC: ' + chunk.substring(12, 24));
+	currentMacs[chunk.substring(12, 24)] = Date.now();
+
+	timestamp = chunk.substring(0, 8);
+	timestamp = parseInt(timestamp, 16);
+	//console.log('Timestamp: ' + timestamp);
+}
+
+function printType(chunk) {
 	//First decode the Type
 	subtype = parseInt(chunk.charAt(24), 16);
 	maintype = parseInt(chunk.charAt(25), 16);
@@ -244,23 +272,4 @@ function decode(chunk) {
 		default:
 			console.log('Go home you are drunk!');
 	}
-	
-	//Get RSSI:
-	rssi = chunk.substring(10, 12);
-	rssi = parseInt(rssi, 16);
-	if ((rssi & 0x80) > 0) {
-		rssi = rssi - 0x100;
-	}
-	console.log('RSSI: ' + rssi);
-
-	channel = chunk.substring(8, 10);
-	channel = parseInt(channel, 16);
-	console.log('Channel: ' + channel);
-
-	console.log('MAC: ' + chunk.substring(12, 24));
-
-	timestamp = chunk.substring(0, 8);
-	timestamp = parseInt(timestamp, 16);
-	console.log('Timestamp: ' + timestamp);
 }
-

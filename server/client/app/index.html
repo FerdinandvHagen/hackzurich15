@@ -59,6 +59,11 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
   var socket = io();
+  socket.emit('getmac', 0);
+  socket.on('currentMacs', function(msg) {
+      alert(msg);
+      console.log(msg);
+  });
 </script>
 
 <script>
