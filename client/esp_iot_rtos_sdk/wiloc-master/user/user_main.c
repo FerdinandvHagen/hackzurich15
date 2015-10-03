@@ -55,8 +55,6 @@ xTimerHandle timer;
 int sta_socket;
 struct sockaddr_in remote_ip;
 
-unsigned char buffer[1024];
-
 unsigned char tx_buffer_m[1024 * 4];
 unsigned char tx_buffer_t[256];
 
@@ -141,18 +139,6 @@ void main_task(void *pvParameters) {
         }
 
         DBG("connect successful");
-
-        int i;
-        for (i = 0; i < sizeof(buffer); i++) {
-            buffer[i] = 't';
-        }
-
-        if (write(sta_socket, buffer, sizeof(buffer)) < 0) {
-            close(sta_socket);
-            sta_socket = 0;
-            vTaskDelay(1000 / portTICK_RATE_MS);
-            printf("ESP8266 TCP client task > send fail\n");
-        }
 
         // we are connected, create task to write
         xTaskCreate(write_task, "write_task", 256, NULL, 2, NULL);

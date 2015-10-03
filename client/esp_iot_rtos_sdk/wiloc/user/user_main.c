@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+#include <uart_protocol.h>
 #include "esp_common.h"
 
 #include "freertos/FreeRTOS.h"
@@ -113,17 +114,19 @@ void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, uns
     uart_data_struct tx;
 
     tx.count = packet_cnt;
+    tx.identifier = 1; // TODO
+
     itstr((char *) tx.timestamp, sizeof(tx.timestamp), timestamp, 16, sizeof(tx.timestamp));
     itstr((char *) tx.channel, 2, channel, 16, 2);
-    itstr((char *) tx.rssi, sizeof(tx.rssi), rssi, 16, sizeof(tx.rssi));
+    itstr((char *) tx.rssi, sizeof(tx.rssi), (unsigned char)rssi, 16, sizeof(tx.rssi));
 
     int i;
     for (i = 0; i < 6; i++) {
         itstr((char *) tx.mac[i], 2, mac[i], 16, 2);
     }
 
-    itstr((char *) tx.byte1, 2, tx.byte1, 16, 2);
-    itstr((char *) tx.byte2, 2, tx.byte2, 16, 2);
+    itstr((char *) tx.byte1, 2, byte1, 16, 2);
+    itstr((char *) tx.byte2, 2, byte2, 16, 2);
 
     // send control byte
 
