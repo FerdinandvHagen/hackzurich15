@@ -1,10 +1,13 @@
 #ifndef __USER_CONFIG_H__
 #define __USER_CONFIG_H__
 
-#define BAUD 460800
+#define BAUD 38400
 
 #define SSID "AUFVH"
 #define PASSWORD "ferdinandvonhagen"
+
+#define SERVER_IP "192.168.188.20"
+#define SERVER_PORT 3003
 
 // hardware configuration
 // DEV:
