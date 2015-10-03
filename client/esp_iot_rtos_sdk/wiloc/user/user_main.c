@@ -125,6 +125,10 @@ void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, uns
     itstr((char *) tx.byte1, 2, tx.byte1, 16, 2);
     itstr((char *) tx.byte2, 2, tx.byte2, 16, 2);
 
+    // send control byte
+
+    uart_tx_one_char(UART, CTRL_DATA);
+
     // send bytes constructed so far and termination byte
 
     for (i = 0; i < sizeof(tx.bytes); i++) {

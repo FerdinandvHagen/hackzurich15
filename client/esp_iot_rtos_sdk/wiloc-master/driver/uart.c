@@ -381,8 +381,6 @@ uart_init_new(int baud, uart_rx_callback callback)
     UART_WaitTxFifoEmpty(UART0);
     UART_WaitTxFifoEmpty(UART1);
 
-    //system_uart_swap();
-
     UART_ConfigTypeDef uart_config;
 
     // configure main uart (used for bridge)
