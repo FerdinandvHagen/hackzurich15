@@ -32,6 +32,7 @@ SOFTWARE.
 #include "lwip/sockets.h"
 
 #include "uart.h"
+#include "uart_protocol.h"
 #include "monitor_mode.h"
 
 #include "user_config.h"
@@ -52,40 +53,51 @@ xTimerHandle timer;
 unsigned char ignored_macs[MAX_INGORE_MACS][6];
 int ignored_macs_count = 0;
 
+void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel, unsigned int timestamp);
+
 void promisc_cb(uint8 *buf, uint16 len) {
-    gpio_signal(1);
+    gpio_signal(2);
 
     printf("%d -> %3d: %d \n", system_get_time(), wifi_get_channel(), len);
 
-    if (len == 128) {
-        struct sniffer_buf2 *sb = (struct sniffer_buf2 *) buf;
-        printf("p rssi:%d rate: %d ch:%d ", sb->rx_ctrl.rssi, sb->rx_ctrl.rate, sb->rx_ctrl.channel);
-        printf("cnt:%d data: ", sb->cnt);
-        int i;
-        for (i = 0; i < sb->len; i++) {
-            printf("%02X", sb->buf[i]);
-        }
-        printf("\n");
-    } else if (len == 12) {
-        struct RxControl *rx_ctrl = (struct RxControl *) buf;
-        printf("rx rssi:%d rate: %d ch:%d \n", rx_ctrl->rssi, rx_ctrl->rate, rx_ctrl->channel);
-    } else {
-        struct sniffer_buf *sb = (struct sniffer_buf *) buf;
-        printf("p rssi:%d rate: %d ch:%d \n", sb->rx_ctrl.rssi, sb->rx_ctrl.rate, sb->rx_ctrl.channel);
-        printf("cnt:%d head: ", sb->cnt);
-        int i;
-        for (i = 0; i < 32; i++) {
-            printf("%02X", sb->buf[i]);
-        }
-        printf("\n");
-    }
+    //Extract the first to bytes from the system
+    uint8 byte1;
+    uint8 byte2;
+    char mac[6];
+    char rssi;
+    uint8 channel;
 
-    /*
-    printmac(buf, 4);
-    printmac(buf, 10);
-    printmac(buf, 16);
-    printf("\n");
-     */
+    if (len != 12) {
+        if (len == 128) {
+            struct sniffer_buf2 *sb = (struct sniffer_buf2 *) buf;
+            byte1 = sb->buf[0];
+            byte2 = sb->buf[1];
+            rssi = sb->rx_ctrl.rssi;
+            channel = (uint8) sb->rx_ctrl.channel;
+
+            //MAC-Address is just always the second address in the packet because this is always the direct Transmission Address
+            int i;
+            for (i = 0; i < 6; ++i) {
+                mac[i] = sb->buf[10 + i];
+            }
+        } else {
+            struct sniffer_buf *sb = (struct sniffer_buf *) buf;
+            byte1 = sb->buf[0];
+            byte2 = sb->buf[1];
+            rssi = sb->rx_ctrl.rssi;
+            channel = (uint8) sb->rx_ctrl.channel;
+
+            //MAC-Address is just always the second address in the packet because this is always the direct Transmission Address
+            int i;
+            for (i = 0; i < 6; ++i) {
+                mac[i] = sb->buf[10 + i];
+            }
+        }
+
+        uart_tx(byte1, byte2, rssi, mac, wifi_get_channel(), system_get_time());
+    } else {
+        printf("Packet not convertible. Ignoring");
+    }
 
     gpio_signal(1);
 }
@@ -97,28 +109,21 @@ void promisc_cb(uint8 *buf, uint16 len) {
 
 unsigned char packet_cnt = 1;
 
-typedef union {
-    struct {
-        unsigned char count;
-        unsigned char timestamp[8];
-        unsigned char rssi[2];
-        unsigned char mac[6][2];
-    };
-    unsigned char bytes[1 + 8 + 2 + 12];
-} uart_tx_struct;
-
-void uart_tx(int timestamp, char rssi, char *mac) {
-
-    uart_tx_struct tx;
+void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel, unsigned int timestamp) {
+    uart_data_struct tx;
 
     tx.count = packet_cnt;
     itstr((char *) tx.timestamp, sizeof(tx.timestamp), timestamp, 16, sizeof(tx.timestamp));
+    itstr((char *) tx.channel, 2, channel, 16, 2);
     itstr((char *) tx.rssi, sizeof(tx.rssi), rssi, 16, sizeof(tx.rssi));
 
     int i;
     for (i = 0; i < 6; i++) {
         itstr((char *) tx.mac[i], 2, mac[i], 16, 2);
     }
+
+    itstr((char *) tx.byte1, 2, tx.byte1, 16, 2);
+    itstr((char *) tx.byte2, 2, tx.byte2, 16, 2);
 
     // send bytes constructed so far and termination byte
 
