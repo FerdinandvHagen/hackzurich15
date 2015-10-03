@@ -161,7 +161,7 @@ void main_task(void *pvParameters) {
     gpio_init();
 
 #ifndef TEST_DATA
-    unsigned char mac[] = {0x00,0xF4,0xB9,0x6A,0x32,0xED};
+    unsigned char mac[] = {0x00, 0xF4, 0xB9, 0x6A, 0x32, 0xED};
     wifi_promiscuous_set_mac(mac);
     wifi_promiscuous_enable(1);
 
@@ -203,7 +203,8 @@ uart_dev_id_struct dev_id_struct;
 void uart_rx_complete() {
     switch (uart_ctrl) {
         case DEVICE_IDENTIFIER:
-            dev_id = dev_id_struct.dev_id;
+            // TODO enable device identfier setting over UART
+            // dev_id = dev_id_struct.dev_id;
 
             if (dev_id == 0) {
                 dev_id = 1;
@@ -270,6 +271,31 @@ void uart_rx(int len) {
 
 }
 
+unsigned int calcCRC16r(unsigned int crc, unsigned int c) { // CCITT 16 bit (X^16 + X^12 + X^5 + 1).
+    crc = (unsigned char) (crc >> 8) | (crc << 8);
+    crc ^= c;
+    crc ^= (unsigned char) (crc & 0xff) >> 4;
+    crc ^= (crc << 8) << 4;
+    crc ^= ((crc & 0xff) << 4) << 1;
+
+    return (crc);
+}
+
+void assign_dev_id() {
+    unsigned char mac[6];
+
+    wifi_get_macaddr(STATION_IF, mac);
+
+    unsigned int crc = mac[0];
+
+    int i;
+    for (i = 1; i < 6; i++) {
+        crc = calcCRC16r(crc, mac[i]);
+    }
+
+    dev_id = (unsigned char) crc;
+}
+
 /******************************************************************************
  * FunctionName : user_init
  * Description  : entry of user application, init user function here
@@ -333,6 +359,9 @@ void user_init(void) {
 #endif
 
     DBG(" ---- done");
+
+    // assign device based on MAC
+    assign_dev_id();
 
     xTaskCreate(main_task, "main", 256, NULL, 2, NULL);
 
