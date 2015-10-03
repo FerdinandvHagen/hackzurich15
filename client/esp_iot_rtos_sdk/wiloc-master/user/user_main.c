@@ -54,6 +54,8 @@ xTimerHandle timer;
 int sta_socket;
 struct sockaddr_in remote_ip;
 
+unsigned char buffer[1024];
+
 unsigned char ignored_macs[MAX_INGORE_MACS][6];
 int ignored_macs_count = 0;
 
@@ -94,6 +96,18 @@ void main_task(void *pvParameters) {
 
         DBG("connect successful");
 
+        int i;
+        for (i = 0; i < sizeof(buffer); i++) {
+            buffer[i] = 't';
+        }
+
+        if (write(sta_socket, buffer, sizeof(buffer)) < 0) {
+            close(sta_socket);
+            sta_socket = 0;
+            vTaskDelay(1000 / portTICK_RATE_MS);
+            printf("ESP8266 TCP client task > send fail\n");
+        }
+
         while (sta_socket) {
             int recbytes = 0;
             char *recv_buf = (char *) zalloc(128);
@@ -133,6 +147,7 @@ void uart_received() {
 
     //printf("%s\n", data.bytes);
 
+    /*
     if (sta_socket) {
         if (write(sta_socket, data.bytes, sizeof(data.bytes)) < 0) {
             close(sta_socket);
@@ -141,6 +156,7 @@ void uart_received() {
             printf("ESP8266 TCP client task > send fail\n");
         }
     }
+     */
 
     //packet.count = data.count;
 }
