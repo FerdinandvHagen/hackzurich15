@@ -3,48 +3,58 @@ var app = express();
 
 var net = require('net');
 
-var MongoClient = require('mongodb').MongoClient;
-var assert = require('assert');
-var ObjectId = require('mongodb').ObjectID;
+var app = require('express')();
+var http = require('http').Server(app);
+var io = require('socket.io')(http);
 
-var url = 'mongodb://localhost:27017/hackzurich15';
+var serveStatic = require('serve-static')
 
-MongoClient.connect(url, function (err, db) {
-	assert.equal(null, err);
-	var socketServer = net.createServer(function (socket) {
-		socket.on('end', function () {
-			console.log('client disconnected');
-		});
+app.use('/app', serveStatic('../client/app'));
+app.use('/bower_components', express.static('../client/bower_components'));
 
-		socket.on('timeout', function () {
-			console.log('Closing socket to ' + socket.remoteAddress + ' due to a timeout');
-			socket.destroy();
-		})
+app.get('/', function(req, res){
+  res.sendfile('index.html');
+});
 
-		console.log("Client connected :)  " + socket.remoteAddress);
-		socket.setTimeout(60000);
-		
-		socket.on('data', function (data) {
-			chunks = String(data).split('\0');
-			for (i = 0; i < chunks.length; ++i) {
-				if (chunks[i].length == 31) {
-					//ignore first character
-					console.log('ID: ' + chunks[i].charCodeAt(2));
-					decode(chunks[i].substring(3, chunks[i].length));
-					db.collection('dump').insertOne({
-						"data": data,
-						"timestamp": process.hrtime()
-					}, function (err, result) {
-						assert.equal(err,null);
-					});
-				}
+io.on('connection', function(socket){
+  console.log('Browser connected');
+});
+
+http.listen(3000, function(){
+  console.log('listening on *:3000');
+});
+
+
+
+
+
+var socketServer = net.createServer(function (socket) {
+	socket.on('end', function () {
+		console.log('client disconnected');
+	});
+
+	socket.on('timeout', function () {
+		console.log('Closing socket to ' + socket.remoteAddress + ' due to a timeout');
+		socket.destroy();
+	})
+
+	console.log("Client connected :)  " + socket.remoteAddress);
+	socket.setTimeout(60000);
+
+	socket.on('data', function (data) {
+		chunks = String(data).split('\0');
+		for (i = 0; i < chunks.length; ++i) {
+			if (chunks[i].length == 31) {
+				//ignore first character
+				console.log('ID: ' + chunks[i].charCodeAt(2));
+				decode(chunks[i].substring(3, chunks[i].length));
 			}
-		});
+		}
 	});
+});
 
-	socketServer.listen(3003, function () {
-		console.log('Socket Server is now bound');
-	});
+socketServer.listen(3003, function () {
+	console.log('Socket Server is now bound');
 });
 
 
@@ -240,16 +250,16 @@ function decode(chunk) {
 	if ((rssi & 0x80) > 0) {
 		rssi = rssi - 0x100;
 	}
-	//console.log('RSSI: ' + rssi);
+	console.log('RSSI: ' + rssi);
 
 	channel = chunk.substring(8, 10);
 	channel = parseInt(channel, 16);
-	//console.log('Channel: ' + channel);
+	console.log('Channel: ' + channel);
 
 	console.log('MAC: ' + chunk.substring(12, 24));
 
 	timestamp = chunk.substring(0, 8);
 	timestamp = parseInt(timestamp, 16);
-	//console.log('Timestamp: ' + timestamp);
+	console.log('Timestamp: ' + timestamp);
 }
 
