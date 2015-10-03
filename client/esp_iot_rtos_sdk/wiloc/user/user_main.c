@@ -45,40 +45,49 @@ SOFTWARE.
 
 xTimerHandle timer;
 
+void sendOverUART(uint8 byte1, uint8 byte2, char rssi, char *mac, uint8 channel, uint32 timestamp);
+
 void promisc_cb(uint8 *buf, uint16 len) {
     gpio_signal(1);
 
     printf("%d -> %3d: %d \n", system_get_time(), wifi_get_channel(), len);
 
-    if (len == 128) {
-        struct sniffer_buf2 *sb = (struct sniffer_buf2 *) buf;
-        printf("p rssi:%d rate: %d ch:%d ", sb->rx_ctrl.rssi, sb->rx_ctrl.rate, sb->rx_ctrl.channel);
-        printf("cnt:%d data: ", sb->cnt);
-        int i;
-        for (i = 0; i < sb->len; i++) {
-            printf("%02X", sb->buf[i]);
-        }
-        printf("\n");
-    } else if (len == 12) {
-        struct RxControl *rx_ctrl = (struct RxControl*) buf;
-        printf("rx rssi:%d rate: %d ch:%d \n",rx_ctrl->rssi, rx_ctrl->rate, rx_ctrl->channel);
-    } else {
-        struct sniffer_buf *sb = (struct sniffer_buf*) buf;
-        printf("p rssi:%d rate: %d ch:%d \n", sb->rx_ctrl.rssi, sb->rx_ctrl.rate, sb->rx_ctrl.channel);
-        printf("cnt:%d head: ", sb->cnt);
-        int i;
-        for (i = 0; i < 32; i++) {
-            printf("%02X", sb->buf[i]);
-        }
-        printf("\n");
-    }
+    //Extract the first to bytes from the system
+    uint8 byte1;
+    uint8 byte2;
+    char mac[6];
+    char rssi;
+    uint8 channel;
 
-    /*
-    printmac(buf, 4);
-    printmac(buf, 10);
-    printmac(buf, 16);
-    printf("\n");
-     */
+    if (len != 12) {
+        if (len == 128) {
+            struct sniffer_buf2 *sb = (struct sniffer_buf2 *) buf;
+            byte1 = sb->buf[0];
+            byte2 = sb->buf[1];
+            rssi = sb->rx_ctrl.rssi;
+            channel = (uint8)sb->rx_ctrl.channel;
+
+            //MAC-Address is just always the second address in the packet because this is always the direct Transmission Address
+            for (int i = 0; i < 6; ++i) {
+                mac[i] = sb->buf[10 + i];
+            }
+        } else {
+            struct sniffer_buf *sb = (struct sniffer_buf *) buf;
+            byte1 = sb->buf[0];
+            byte2 = sb->buf[1];
+            rssi = sb->rx_ctrl.rssi;
+            channel = (uint8)sb->rx_ctrl.channel;
+
+            //MAC-Address is just always the second address in the packet because this is always the direct Transmission Address
+            for (int i = 0; i < 6; ++i) {
+                mac[i] = sb->buf[10 + i];
+            }
+        }
+
+        sendOverUART(byte1, byte2, rssi, mac, channel, system_get_time());
+    } else {
+        printf("Packet not convertible. Ignoring");
+    }
 
     gpio_signal(1);
 }
