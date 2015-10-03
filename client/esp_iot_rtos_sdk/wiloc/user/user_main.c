@@ -155,7 +155,19 @@ void main_task(void *pvParameters) {
 
     gpio_init();
 
-    wifi_promiscuous_enable(1);
+    //wifi_promiscuous_enable(1);
+
+    unsigned char mac[6];
+    int i;
+
+    for (i; i < 6; i++) {
+        mac[i] = (char) i;
+    }
+
+    while (1) {
+        uart_tx(0xff, 0xee, -14, (char *) mac, 10, 0x10203040);
+        vTaskDelay(1000 / portTICK_RATE_MS);
+    }
 
     vTaskSuspend(NULL);
 }

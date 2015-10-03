@@ -22,60 +22,63 @@ int data_len = 0;
 uart_rx_state rx_state = CTRL_BYTE;
 
 void uart_received() {
-    for (int i = 0; i < data_len; i++) {
-        printf("%02X", data.bytes[i]);
-    }
+    int i;
 
     uart_data_packet packet;
 
-    printf("%s\n", data.bytes);
+    //printf("%s\n", data.bytes);
 
     //packet.count = data.count;
-
 }
 
-void uart_parse(char c) {
+void uart_parse(unsigned char c) {
     switch (rx_state) {
         case CTRL_BYTE:
-            uart_ctrl = c;
-            rx_state = DATA;
+            if (c != 0) {
+                uart_ctrl = c;
+                rx_state = DATA;
+                data_len = 0;
+            }
             break;
 
         case DATA:
             if (c == 0) {
-                bool valid = false;
+                bool valid = true;
                 switch (uart_ctrl) {
                     case CTRL_DATA:
-                        if (data_len == sizeof(uart_data_struct)) {
+                        if (data_len == sizeof(uart_data_struct) - 1) {
                             valid = true;
+                        } else {
+                            DBG("other length expected (2): %d - %d", data_len, sizeof(uart_data_struct));
                         }
                         break;
                 }
                 if (valid) {
                     uart_received();
                 } else {
-                    DBG("other length expected");
+                    DBG("other length expected: %d", data_len);
                 }
                 rx_state = CTRL_BYTE;
-                break;
-            }
-            switch (uart_ctrl) {
-                case CTRL_DATA:
-                    if (data_len > sizeof(uart_data_struct)) {
-                        rx_state = END;
-                        DBG("buffer overflow");
-                    } else {
-                        data.bytes[data_len++] = c;
-                    }
-                    break;
+            } else {
+                switch (uart_ctrl) {
+                    case CTRL_DATA:
+                        if (data_len > sizeof(uart_data_struct)) {
+                            rx_state = END;
+                            DBG("buffer overflow");
+                        } else {
+                            data.bytes[data_len++] = c;
+                        }
+                        break;
+                }
             }
             break;
+
         case END:
             if (c == 0) {
                 rx_state = CTRL_BYTE;
                 break;
             }
-
+            break;
     }
 }
 

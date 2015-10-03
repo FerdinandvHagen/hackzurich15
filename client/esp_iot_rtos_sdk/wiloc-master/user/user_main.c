@@ -119,6 +119,7 @@ typedef enum {
 
 unsigned char uart_ctrl;
 
+unsigned char buffer2[1024];
 uart_data_struct data;
 int data_len = 0;
 
@@ -143,12 +144,14 @@ void uart_received() {
     //packet.count = data.count;
 }
 
-void uart_parse(char c) {
+void uart_parse(unsigned char c) {
     switch (rx_state) {
         case CTRL_BYTE:
-            uart_ctrl = c;
-            rx_state = DATA;
-            data_len = 0;
+            if (c != 0) {
+                uart_ctrl = c;
+                rx_state = DATA;
+                data_len = 0;
+            }
             break;
 
         case DATA:
@@ -159,7 +162,7 @@ void uart_parse(char c) {
                         if (data_len == sizeof(uart_data_struct) - 1) {
                             valid = true;
                         } else {
-                            DBG("other length expected (2): %d", data_len);
+                            DBG("other length expected (2): %d - %d", data_len, sizeof(uart_data_struct));
                         }
                         break;
                 }
@@ -169,25 +172,26 @@ void uart_parse(char c) {
                     DBG("other length expected: %d", data_len);
                 }
                 rx_state = CTRL_BYTE;
-                break;
-            }
-            switch (uart_ctrl) {
-                case CTRL_DATA:
-                    if (data_len > sizeof(uart_data_struct)) {
-                        rx_state = END;
-                        DBG("buffer overflow");
-                    } else {
-                        data.bytes[data_len++] = c;
-                    }
-                    break;
+            } else {
+                switch (uart_ctrl) {
+                    case CTRL_DATA:
+                        if (data_len > sizeof(uart_data_struct)) {
+                            rx_state = END;
+                            DBG("buffer overflow");
+                        } else {
+                            data.bytes[data_len++] = c;
+                        }
+                        break;
+                }
             }
             break;
+
         case END:
             if (c == 0) {
                 rx_state = CTRL_BYTE;
                 break;
             }
-
+            break;
     }
 }
 
