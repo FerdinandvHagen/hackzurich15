@@ -13,7 +13,7 @@ app.use('/app', serveStatic('../client/app'));
 app.use('/bower_components', express.static('../client/bower_components'));
 
 app.get('/', function(req, res){
-  res.sendfile('index.html');
+  res.redirect('/app/index.html');
 });
 
 io.on('connection', function(socket){
@@ -46,7 +46,8 @@ var socketServer = net.createServer(function (socket) {
 		for (i = 0; i < chunks.length; ++i) {
 			if (chunks[i].length == 31) {
 				//ignore first character
-				console.log('ID: ' + chunks[i].charCodeAt(2));
+				buf = new Buffer(chunks[i]);
+				console.log('ID: ' + buf[2]);
 				decode(chunks[i].substring(3, chunks[i].length));
 			}
 		}
