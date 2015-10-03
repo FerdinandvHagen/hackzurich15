@@ -4,6 +4,7 @@
 // available control bytes
 
 #define CTRL_DATA 1
+#define DEVICE_IDENTIFIER 2
 
 typedef union {
     struct {
@@ -28,5 +29,12 @@ typedef struct {
     unsigned char byte1;
     unsigned char byte2;
 } uart_data_packet;
+
+typedef union {
+    struct {
+        unsigned char dev_id;
+    };
+    unsigned char bytes[1];
+} uart_dev_id_struct;
 
 #endif //WILOC_COMMON_UART_PROTOCOL_H

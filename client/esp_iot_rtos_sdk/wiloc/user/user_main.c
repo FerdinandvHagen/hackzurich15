@@ -40,6 +40,8 @@ SOFTWARE.
 #include "gpio.h"
 #include "itstr.h"
 
+//#define TEST_DATA
+
 // this field depends on total count of our nodes
 #define MAX_INGORE_MACS 16
 
@@ -47,19 +49,22 @@ SOFTWARE.
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
 #define DBG(str, ...) printf(str "\n", ##__VA_ARGS__)
 
-#define printmac(buf, i) printf("%02X:%02X:%02X:%02X:%02X:%02X", buf[i+0], buf[i+1], buf[i+2], buf[i+3], buf[i+4], buf[i+5])
+#define printmac(buf, i) DBG("%02X:%02X:%02X:%02X:%02X:%02X", buf[i+0], buf[i+1], buf[i+2], buf[i+3], buf[i+4], buf[i+5])
 
 xTimerHandle timer;
+
+unsigned char dev_id = 1; // default id is 1
 
 unsigned char ignored_macs[MAX_INGORE_MACS][6];
 int ignored_macs_count = 0;
 
-void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel, unsigned int timestamp);
+void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel,
+             unsigned int timestamp);
 
 void promisc_cb(uint8 *buf, uint16 len) {
     gpio_signal(2);
 
-    printf("%d -> %3d: %d \n", system_get_time(), wifi_get_channel(), len);
+    // DBG("%d -> %3d: %d \n", system_get_time(), wifi_get_channel(), len);
 
     //Extract the first to bytes from the system
     uint8 byte1;
@@ -97,28 +102,25 @@ void promisc_cb(uint8 *buf, uint16 len) {
 
         uart_tx(byte1, byte2, rssi, mac, wifi_get_channel(), system_get_time());
     } else {
-        printf("Packet not convertible. Ignoring");
+        DBG("Packet not convertible. Ignoring");
     }
 
     gpio_signal(1);
 }
 
-/**
- * UART TX packet structure:
- * | packet count : 8 | timestamp : 8 * 8 | rssi : 8 * 2 | end : 8 |
- */
 
 unsigned char packet_cnt = 1;
 
-void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel, unsigned int timestamp) {
+void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel,
+             unsigned int timestamp) {
     uart_data_struct tx;
 
     tx.count = packet_cnt;
-    tx.identifier = 1; // TODO
+    tx.identifier = dev_id;
 
     itstr((char *) tx.timestamp, sizeof(tx.timestamp), timestamp, 16, sizeof(tx.timestamp));
     itstr((char *) tx.channel, 2, channel, 16, 2);
-    itstr((char *) tx.rssi, sizeof(tx.rssi), (unsigned char)rssi, 16, sizeof(tx.rssi));
+    itstr((char *) tx.rssi, sizeof(tx.rssi), (unsigned char) rssi, 16, sizeof(tx.rssi));
 
     int i;
     for (i = 0; i < 6; i++) {
@@ -158,19 +160,25 @@ void main_task(void *pvParameters) {
 
     gpio_init();
 
-    //wifi_promiscuous_enable(1);
+#ifndef TEST_DATA
+    unsigned char mac[] = {0x00,0xF4,0xB9,0x6A,0x32,0xED};
+    wifi_promiscuous_set_mac(mac);
+    wifi_promiscuous_enable(1);
+#endif
 
+#ifdef TEST_DATA
     unsigned char mac[6];
     int i;
 
     for (i; i < 6; i++) {
-        mac[i] = (char) i;
+        mac[i] = (unsigned char) i;
     }
 
     while (1) {
         uart_tx(0xff, 0xee, -14, (char *) mac, 10, 0x10203040);
         vTaskDelay(1000 / portTICK_RATE_MS);
     }
+#endif
 
     vTaskSuspend(NULL);
 }
@@ -178,15 +186,81 @@ void main_task(void *pvParameters) {
 // UART RX parsing
 
 typedef enum {
-    WAITING, CTRL_BYTE, DATA, END
-};
+    CTRL_BYTE, DATA, END
+} uart_state;
+
+int current_pos;
+unsigned char uart_ctrl;
+uart_state state = CTRL_BYTE;
+
+uart_dev_id_struct dev_id_struct;
+
+void uart_rx_complete() {
+    switch (uart_ctrl) {
+        case DEVICE_IDENTIFIER:
+            dev_id = dev_id_struct.dev_id;
+
+            if (dev_id == 0) {
+                dev_id = 1;
+            }
+
+            DBG("got dev_id: %d", dev_id);
+            break;
+    }
+}
+
+void uart_parse(unsigned char c) {
+    switch (state) {
+        case CTRL_BYTE:
+            // ignore all zero bytes
+            if (c != 0) {
+                uart_ctrl = c;
+                current_pos = 0;
+                state = DATA;
+            }
+            break;
+
+        case DATA:
+            if (c == 0) {
+                switch (uart_ctrl) {
+                    case DEVICE_IDENTIFIER:
+                        if (current_pos == sizeof(dev_id_struct.bytes)) {
+                            uart_rx_complete();
+                        }
+                        break;
+                }
+                state = CTRL_BYTE;
+            } else {
+                switch (uart_ctrl) {
+                    case DEVICE_IDENTIFIER:
+                        if (current_pos < sizeof(dev_id_struct.bytes)) {
+                            dev_id_struct.bytes[current_pos++] = c;
+                        } else {
+                            state = END;
+                        }
+                        break;
+
+                    default:
+                        state = END;
+
+                }
+            }
+            break;
+
+        case END:
+            if (c == 0) {
+                uart_ctrl = CTRL_BYTE;
+            }
+            break;
+    }
+}
 
 void uart_rx(int len) {
 
     int i;
-
     for (i = 0; i < len; i++) {
-        printf("rx:%d", uart_rx_one_char(UART));
+        //DBG("rx:%d", uart_rx_one_char(UART));
+        uart_parse(uart_rx_one_char(UART));
     }
 
 }
@@ -206,21 +280,20 @@ void user_init(void) {
 
     uart_init_new(BAUD, uart_rx);
 
-    printf("setting cpu freq to 160 MHz\n");
+    DBG("setting cpu freq to 160 MHz");
 
-    printf("SDK version:%s\n", system_get_sdk_version());
+    DBG("SDK version:%s", system_get_sdk_version());
 
     unsigned char mac[6];
 
     wifi_get_macaddr(STATION_IF, mac);
-    printf("MAC-STA:");
+    DBG("MAC-STA:");
     printmac(mac, 0);
-    printf("\n");
 
     wifi_get_macaddr(SOFTAP_IF, mac);
-    printf("MAC- AP:");
+    DBG("MAC- AP:");
     printmac(mac, 0);
-    printf("\n");
+
 
 #ifdef DOUBLE_CLK_FREQ
     system_update_cpu_freq(160);

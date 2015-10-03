@@ -55,13 +55,15 @@ xTimerHandle timer;
 int sta_socket;
 struct sockaddr_in remote_ip;
 
-unsigned char tx_buffer_m[1024 * 4];
-unsigned char tx_buffer_t[256];
+unsigned char tx_buffer_m[1024 * 16];
+unsigned char tx_buffer_t[256 * 4];
 
 xQueueHandle tx_queue;
 
 xSemaphoreHandle ringbuf_mutex;
 ringbuf ringbuf_m, ringbuf_t; // main and temporary ringbuffer
+
+unsigned char dev_id;
 
 unsigned char ignored_macs[MAX_INGORE_MACS][6];
 int ignored_macs_count = 0;
@@ -161,8 +163,6 @@ void main_task(void *pvParameters) {
 }
 
 // UART RX parsing
-
-
 typedef enum {
     CTRL_BYTE, DATA, END
 } uart_rx_state;
@@ -208,7 +208,7 @@ void uart_rx(int length) {
         }
     }
 
-    DBG("uart_rx: %d b", length);
+    //DBG("uart_rx: %d b", length);
 
     // notify send task that there is data to be sent
     xQueueSendToBackFromISR(tx_queue, &length, NULL);
@@ -222,6 +222,24 @@ void uart_rx(int length) {
 
 void connect_to_server() {
     xTaskCreate(main_task, "main", 256, NULL, 2, NULL);
+}
+
+/**
+ * transfer device identifier to other module
+ */
+void synchronize_dev_id() {
+
+    uart_dev_id_struct dev_id_struct;
+    dev_id_struct.dev_id = dev_id;
+
+    uart_tx_one_char(UART, DEVICE_IDENTIFIER);
+
+    int i;
+    for (i = 0; i < sizeof(dev_id_struct.bytes); i++) {
+        uart_tx_one_char(UART, dev_id_struct.bytes[i]);
+    }
+
+    uart_tx_one_char(UART, 0);
 }
 
 
@@ -288,6 +306,8 @@ void user_init(void) {
 
     ringbuf_init(&ringbuf_m, tx_buffer_m, sizeof(tx_buffer_m));
     ringbuf_init(&ringbuf_t, tx_buffer_t, sizeof(tx_buffer_t));
+
+    synchronize_dev_id();
 
     // wait until wifi is connected
     user_wifi_init(connect_to_server);
