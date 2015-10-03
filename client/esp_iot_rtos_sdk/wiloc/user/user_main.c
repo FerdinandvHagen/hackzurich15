@@ -164,6 +164,11 @@ void main_task(void *pvParameters) {
     unsigned char mac[] = {0x00,0xF4,0xB9,0x6A,0x32,0xED};
     wifi_promiscuous_set_mac(mac);
     wifi_promiscuous_enable(1);
+
+#ifdef FIXED_CHANNEL
+    wifi_set_channel(FIXED_CHANNEL);
+#endif
+
 #endif
 
 #ifdef TEST_DATA

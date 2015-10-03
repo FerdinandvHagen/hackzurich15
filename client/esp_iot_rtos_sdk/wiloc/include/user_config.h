@@ -6,6 +6,8 @@
 //#define CHANNEL_HOP_ENABLED
 #define CHANNEL_HOP_INTERVAL 50
 
+#define FIXED_CHANNEL 1
+
 // hardware configuration
 // DEV:
 //

@@ -53,6 +53,7 @@ SOFTWARE.
 xTimerHandle timer;
 
 int sta_socket;
+bool sock_connected = false;
 struct sockaddr_in remote_ip;
 
 unsigned char tx_buffer_m[1024 * 16];
@@ -63,12 +64,13 @@ xQueueHandle tx_queue;
 xSemaphoreHandle ringbuf_mutex;
 ringbuf ringbuf_m, ringbuf_t; // main and temporary ringbuffer
 
-unsigned char dev_id;
+unsigned char dev_id = 0xef;
 
 unsigned char ignored_macs[MAX_INGORE_MACS][6];
 int ignored_macs_count = 0;
 
-void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel, unsigned int timestamp);
+void uart_tx(unsigned char byte1, unsigned char byte2, char rssi, char *mac, unsigned char channel,
+             unsigned int timestamp);
 
 /**
  * UART TX packet structure:
@@ -99,8 +101,11 @@ void write_task(void *pvParameters) {
             if (write(sta_socket, tx_buffer_m, i) < 0) {
                 printf("C > send fail\n");
 
-                close(sta_socket);
-                sta_socket = 0;
+                //close(sta_socket);
+                //sta_socket = 0;
+
+                // socket is closed in read task
+
                 break;
             }
         } else {
@@ -133,7 +138,7 @@ void main_task(void *pvParameters) {
         remote_ip.sin_family = AF_INET;
         remote_ip.sin_addr.s_addr = inet_addr(SERVER_IP);
         remote_ip.sin_port = htons(SERVER_PORT);
-        if (0 != connect(sta_socket, (struct sockaddr *)(&remote_ip), sizeof(struct sockaddr))) {
+        if (0 != connect(sta_socket, (struct sockaddr *) (&remote_ip), sizeof(struct sockaddr))) {
             close(sta_socket);
             vTaskDelay(1000 / portTICK_RATE_MS);
             DBG("ESP8266 TCP client task > connect fail!\n");
@@ -141,11 +146,12 @@ void main_task(void *pvParameters) {
         }
 
         DBG("connect successful");
+        sock_connected = true;
 
         // we are connected, create task to write
         xTaskCreate(write_task, "write_task", 256, NULL, 2, NULL);
 
-        while (sta_socket) {
+        while (sta_socket >= 0) {
             int recbytes = 0;
             char *recv_buf = (char *) zalloc(128);
             while ((recbytes = read(sta_socket, recv_buf, 128)) > 0) {
@@ -155,7 +161,8 @@ void main_task(void *pvParameters) {
             free(recv_buf);
             if (recbytes <= 0) {
                 close(sta_socket);
-                sta_socket = 0;
+                sta_socket = -1;
+                sock_connected = false;
                 printf("ESP8266 TCP client task > read data fail!\n");
             }
         }
@@ -176,8 +183,11 @@ int data_len = 0;
 uart_rx_state rx_state = CTRL_BYTE;
 
 void uart_rx(int length) {
-    if (sta_socket < 0)
+    if (!sock_connected) {
+        uart_rx_one_char(UART);
         return;
+    }
+
 
     int i = 0;
     unsigned char c;
@@ -287,8 +297,10 @@ void user_init(void) {
 
     // wifi_softap_set_config(&softapConf);
 
-    char* ssid = SSID;
-    char* password = PASSWORD;
+    os_delay_us(300);
+
+    char *ssid = SSID;
+    char *password = PASSWORD;
     struct station_config stationConf;
     stationConf.bssid_set = 0;  //need not check MAC address of AP
     memcpy(&stationConf.ssid, ssid, strlen(ssid) + 1);
