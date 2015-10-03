@@ -11,6 +11,12 @@ var serveStatic = require('serve-static')
 
 var currentMacs = {};
 
+var subscription = [];
+
+var packets = {};
+
+var nodeCount = 2;
+
 app.use('/app', serveStatic('../client/app'));
 app.use('/bower_components', express.static('../client/bower_components'));
 
@@ -25,8 +31,15 @@ io.on('connection', function (socket) {
 	});
 
 	socket.on('getmac', function (msg) {
-		console.log(currentMacs);
 		socket.emit('currentMacs', currentMacs);
+	});
+
+	socket.on('subscribe', function (msg) {
+		console.log('Subscribing to ' + msg);
+		if (undefined == subscription[msg]) {
+			subscription[msg] = [];
+		}
+		subscription[msg].push(socket);
 	});
 });
 
@@ -51,10 +64,9 @@ var socketServer = net.createServer(function (socket) {
 		chunks = String(data).split('\0');
 		for (i = 0; i < chunks.length; ++i) {
 			if (chunks[i].length == 31) {
-				//ignore first character
+				//ignore first three characters
 				buf = new Buffer(chunks[i]);
-				//console.log('ID: ' + buf[2]);
-				decode(chunks[i].substring(3, chunks[i].length));
+				decode(chunks[i].substring(3, chunks[i].length), buf[2]);
 			}
 		}
 	});
@@ -66,7 +78,7 @@ socketServer.listen(3003, function () {
 
 
 
-function decode(chunk) {
+function decode(chunk, id) {
 	//console.log(chunk);
 	
 	//Get RSSI:
@@ -82,11 +94,40 @@ function decode(chunk) {
 	//console.log('Channel: ' + channel);
 
 	//console.log('MAC: ' + chunk.substring(12, 24));
-	currentMacs[chunk.substring(12, 24)] = Date.now();
+	mac = chunk.substring(12, 24);
+	currentMacs[mac] = Date.now();
 
 	timestamp = chunk.substring(0, 8);
 	timestamp = parseInt(timestamp, 16);
 	//console.log('Timestamp: ' + timestamp);
+	
+	if (mac in packets && packets[mac].timestamp > (Date.now() - 1000)) {
+		if (!(id in packets[mac].rssi)) {
+			packets[mac].rssi[id] = rssi;
+		}
+
+		if (Object.keys(packets[mac].rssi).length == nodeCount) {
+			if (mac in subscription) {
+				subscription[mac].forEach(function (element) {
+					if (element.connected) {
+						element.emit('data', packets[mac]);
+					}
+				}, this);
+			}
+		}
+	} else {
+		time = Date.now();
+		packets[mac] = {
+			timestamp: time,
+			rssi: {},
+			addr:mac
+		};
+		packets[mac].rssi[id] = rssi;
+	}
+
+
+
+
 }
 
 function printType(chunk) {

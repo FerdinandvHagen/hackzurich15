@@ -61,8 +61,11 @@
   var socket = io();
   socket.emit('getmac', 0);
   socket.on('currentMacs', function(msg) {
-      alert(msg);
       console.log(msg);
+      socket.emit('subscribe', Object.keys(msg)[0]);
+  });
+  socket.on('data', function(msg) {
+     console.log(msg); 
   });
 </script>
 
