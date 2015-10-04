@@ -26,6 +26,11 @@ app.get('/', function (req, res) {
 	res.redirect('/app/index.html');
 });
 
+process.on('uncaughtException', function (err) {
+    console.error(err.stack);
+    console.log("Node NOT Exiting...");
+});
+
 io.on('connection', function (socket) {
 	console.log('Browser connected');
 	socket.on('disconnect', function () {
