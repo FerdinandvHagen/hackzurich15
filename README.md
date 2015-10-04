@@ -16,3 +16,5 @@ Goals:
 - GeoLocalization of WiFi-enabled devices
 - Device Recognition
 - Automatic Calibration based on stationary devices (Router, AP, ...)
+
+Possible Applications: HomeAutomation, IoT, Behaviorel Studies, etc.
