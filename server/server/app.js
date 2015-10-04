@@ -17,6 +17,8 @@ var packets = {};
 
 var nodeCount = 0;
 
+console.log("timestamp;rssi;mac;receiver");
+
 app.use('/app', serveStatic('../client/app'));
 app.use('/bower_components', express.static('../client/bower_components'));
 
@@ -25,9 +27,9 @@ app.get('/', function (req, res) {
 });
 
 io.on('connection', function (socket) {
-	console.log('Browser connected');
+	//console.log('Browser connected');
 	socket.on('disconnect', function () {
-		console.log('Browser disconnected');
+		//console.log('Browser disconnected');
 	});
 
 	socket.on('getmac', function (msg) {
@@ -35,7 +37,7 @@ io.on('connection', function (socket) {
 	});
 
 	socket.on('subscribe', function (msg) {
-		console.log('Subscribing to ' + msg);
+		//console.log('Subscribing to ' + msg);
 		if (undefined == subscription[msg]) {
 			subscription[msg] = [];
 		}
@@ -44,26 +46,26 @@ io.on('connection', function (socket) {
 });
 
 http.listen(3000, function () {
-	console.log('listening on *:3000');
+	//console.log('listening on *:3000');
 });
 
 var socketServer = net.createServer(function (socket) {
 	socket.on('end', function () {
 		console.log('client disconnected');
 		nodeCount--;
-		console.log('Now there are ' + nodeCount + ' nodes connected!');
+		//console.log('Now there are ' + nodeCount + ' nodes connected!');
 	});
 
 	socket.on('timeout', function () {
-		console.log('Closing socket to ' + socket.remoteAddress + ' due to a timeout');
+		//console.log('Closing socket to ' + socket.remoteAddress + ' due to a timeout');
 		socket.destroy();
 		nodeCount--;
-		console.log('Now there are ' + nodeCount + ' nodes connected!');
+		//console.log('Now there are ' + nodeCount + ' nodes connected!');
 	});
 
-	console.log("Client connected :)  " + socket.remoteAddress);
+	//console.log("Client connected :)  " + socket.remoteAddress);
 	nodeCount++;
-	console.log('Now there are ' + nodeCount + ' nodes connected!');
+	//console.log('Now there are ' + nodeCount + ' nodes connected!');
 	socket.setTimeout(1000);
 
 	socket.on('data', function (data) {
@@ -71,7 +73,7 @@ var socketServer = net.createServer(function (socket) {
 		for (i = 0; i < chunks.length; ++i) {
 			if (chunks[i].length == 31) {
 				//ignore first three characters
-				id = parseInt(socket.remoteAddress.split('.')[3],10);
+				id = parseInt(socket.remoteAddress.split('.')[3], 10);
 				buf = new Buffer(chunks[i]);
 				decode(chunks[i].substring(3, chunks[i].length), id);
 			}
@@ -80,7 +82,7 @@ var socketServer = net.createServer(function (socket) {
 });
 
 socketServer.listen(3003, function () {
-	console.log('Socket Server is now online');
+	//console.log('Socket Server is now online');
 });
 
 
@@ -108,6 +110,8 @@ function decode(chunk, id) {
 	timestamp = parseInt(timestamp, 16);
 	//console.log('Timestamp: ' + timestamp);
 	
+	console.log(Date.now() + ';' + rssi + ';' + mac + ';192.168.188.' + id);
+
 	if (mac in packets && packets[mac].timestamp > (Date.now() - 1000)) {
 		if (!(id in packets[mac].rssi)) {
 			packets[mac].rssi[id] = rssi;
@@ -131,10 +135,6 @@ function decode(chunk, id) {
 		};
 		packets[mac].rssi[id] = rssi;
 	}
-
-
-
-
 }
 
 function printType(chunk) {
