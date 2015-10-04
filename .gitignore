@@ -21,7 +21,6 @@ coverage
 build/Release
 # Dependency directory
 # https://docs.npmjs.com/misc/faq#should-i-check-my-node-modules-folder-into-git
-node_modules
 /client/esp_iot_rtos_sdk/wiloc-master/firmware/eagle.S
 /client/esp_iot_rtos_sdk/wiloc-master/firmware/eagle.dump
 /client/esp_iot_rtos_sdk/wiloc-master/firmware/eagle.flash.bin
